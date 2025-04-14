@@ -71,8 +71,11 @@ class LtoudpPort(LocalTalkPort):
   
   def send_frame(self, frame_data):
     log_localtalk_frame_outbound(frame_data, self)
-    self._socket.sendto(self._sender_id + frame_data, (self.LTOUDP_GROUP, self.LTOUDP_PORT))
-  
+    try:
+        self._socket.sendto(self._sender_id + frame_data, (self.LTOUDP_GROUP, self.LTOUDP_PORT))
+    except (socket.error, OSError) as e:
+        logging.warning("Failed to send LToUDP frame: %s", str(e))
+
   def _run(self):
     self._started_event.set()
     while not self._stop_requested:
