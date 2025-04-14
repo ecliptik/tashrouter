@@ -8,7 +8,7 @@ from . import Service
 class RoutingTableAgingService(Service):
   '''A Service which ages the Router's RoutingTable on a regular basis.'''
   
-  DEFAULT_TIMEOUT = 20  # seconds
+  DEFAULT_TIMEOUT = 60  # seconds
   
   def __init__(self, timeout=DEFAULT_TIMEOUT):
     self.timeout = timeout

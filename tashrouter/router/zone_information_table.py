@@ -81,6 +81,10 @@ class ZoneInformationTable:
       self._zone_name_to_network_min_set[zone_name].add(network_min)
   
   def remove_networks(self, network_min, network_max=None):
+    logging.debug(f"Removing network range {network_min}-{network_max} from all zones")
+    # Ensure the zone is not removed prematurely
+    if not self._network_min_to_zone_name_set.get(network_min):
+        logging.warning(f"Zone removal skipped for network range {network_min}-{network_max} as no zones are associated.")
     '''Remove a range of networks from all zones, removing associated zones if now empty of networks.'''
     if network_max and network_max < network_min: raise ValueError('range %d-%d is backwards' % (network_min, network_max))
     with self._lock:

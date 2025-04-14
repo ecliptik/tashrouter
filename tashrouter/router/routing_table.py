@@ -96,24 +96,26 @@ class RoutingTable:
     entries_to_delete = set()
     networks_to_delete = deque()
     with self._lock:
-      for entry in set(self._entry_by_network.values()):
-        if self._state_by_entry[entry] == self.STATE_WORST:
-          logging.debug('%s aging out: %s', str(self._router), str(entry))
-          entries_to_delete.add(entry)
-          self._state_by_entry.pop(entry)
-          try:
-            self._router.zone_information_table.remove_networks(entry.network_min, entry.network_max)
-          except ValueError as e:
-            logging.warning("%s couldn't remove networks from zone information table: %s", str(self._router), e.args[0])
-        elif self._state_by_entry[entry] == self.STATE_BAD:
-          self._state_by_entry[entry] = self.STATE_WORST
-        elif self._state_by_entry[entry] == self.STATE_SUS:
-          self._state_by_entry[entry] = self.STATE_BAD
-        elif self._state_by_entry[entry] == self.STATE_GOOD and entry.distance != 0:
-          self._state_by_entry[entry] = self.STATE_SUS
-      for network, entry in self._entry_by_network.items():
-        if entry in entries_to_delete: networks_to_delete.append(network)
-      for network in networks_to_delete: self._entry_by_network.pop(network)
+        for entry in set(self._entry_by_network.values()):
+            if self._state_by_entry[entry] == self.STATE_WORST:
+                logging.debug(f"Aging out entry: {entry}. Reason: Worst state.")
+                entries_to_delete.add(entry)
+                self._state_by_entry.pop(entry)
+                try:
+                    self._router.zone_information_table.remove_networks(entry.network_min, entry.network_max)
+                except ValueError as e:
+                    logging.warning(f"{self._router} couldn't remove networks from zone information table: {e.args[0]}")
+            elif self._state_by_entry[entry] == self.STATE_BAD:
+                logging.debug(f"Marking entry as WORST: {entry}")
+                self._state_by_entry[entry] = self.STATE_WORST
+            elif self._state_by_entry[entry] == self.STATE_SUS:
+                logging.debug(f"Marking entry as BAD: {entry}")
+                self._state_by_entry[entry] = self.STATE_BAD
+        for network, entry in self._entry_by_network.items():
+            if entry in entries_to_delete:
+                networks_to_delete.append(network)
+        for network in networks_to_delete:
+            self._entry_by_network.pop(network)
   
   def entries(self):
     '''Yield entries from this RoutingTable along with their badness state.'''
