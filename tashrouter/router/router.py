@@ -44,7 +44,10 @@ class Router:
   
   def _deliver(self, datagram, rx_port):
     '''Deliver a datagram locally to the "control plane" of the router.'''
-    if service := self._services_by_sas.get(datagram.destination_socket): service.inbound(datagram, rx_port)
+    if service := self._services_by_sas.get(datagram.destination_socket):
+        service.inbound(datagram, rx_port)
+    else:
+        logging.warning(f"DROP: No service found for destination socket ({datagram.destination_socket}) in Datagram: {datagram}")
   
   def start(self):
     '''Start this router.'''
@@ -116,31 +119,44 @@ class Router:
       # we expect source_network will be zero and we'll fill it in once we know what port we're coming from
     
     # if we still don't know where we're going, we obviously can't get there; discard the Datagram
-    if datagram.destination_network == 0x0000: return
+    if datagram.destination_network == 0x0000:
+      logging.warning(f"DROP: Invalid destination network (0x0000) for Datagram: {datagram}")
+      return
     
     # if the hop count is too high, we can't increment it even if we'd otherwise send the Datagram on; discard the Datagram
-    if datagram.hop_count >= 15: return
+    if datagram.hop_count >= 15:
+      logging.warning(f"DROP: Exceeded maximum hop count for Datagram: {datagram}")
+      return
     
     entry, _ = self.routing_table.get_by_network(datagram.destination_network)
     
     # you can't get there from here; discard the Datagram
-    if entry is None: return
+    if entry is None:
+      logging.warning(f"DROP: No routing table entry for destination network: {datagram.destination_network}. Datagram: {datagram}")
+      return
     
     # if we're originating this datagram, we expect that its source network and node will be blank
     if originating:
       # if for some reason the port is in the routing table but doesn't yet have a network and node, discard the Datagram
-      if entry.port.network == 0x0000 or entry.port.node == 0x00: return
+      if entry.port.network == 0x0000 or entry.port.node == 0x00:
+        logging.warning(f"DROP: Invalid routing table entry for Datagram: {datagram}. Port: {entry.port}")
+        return
       # else, fill in its source network and node with those of the port it's coming from
       datagram = datagram.copy(source_network=entry.port.network, source_node=entry.port.node)
     else:
       # invalid values for source node, ports will refuse to send it on; discard the Datagram
-      if datagram.source_node in (0x00, 0xFF): return
+      if datagram.source_node in (0x00, 0xFF):
+        logging.warning(f"DROP: Invalid source node ({datagram.source_node}) for Datagram: {datagram}")
+        return
       # we're not originating this datagram, so bump its hop count
       datagram = datagram.hop()
     
     # here isn't there but we know how to get there; send the Datagram to the next router
     if entry.distance != 0:
-      entry.port.unicast(entry.next_network, entry.next_node, datagram)
+      try:
+        entry.port.unicast(entry.next_network, entry.next_node, datagram)
+      except Exception as e:
+        logging.error(f"DROP: Failed to unicast Datagram: {datagram}. Error: {e}")
     # special 'any router' address (see IA page 4-7), control plane's responsibility; discard the Datagram
     elif datagram.destination_node == 0x00:
       pass
@@ -149,7 +165,10 @@ class Router:
       pass
     # the destination is a broadcast to a network to which we are directly connected; broadcast the Datagram there
     elif datagram.destination_node == 0xFF:
-      entry.port.broadcast(datagram)
+      try:
+        entry.port.broadcast(datagram)
+      except Exception as e:
+        logging.error(f"DROP: Failed to broadcast Datagram: {datagram}. Error: {e}")
     # the destination is connected to us directly; send the Datagram to its final destination
     else:
       entry.port.unicast(datagram.destination_network, datagram.destination_node, datagram)
@@ -158,7 +177,8 @@ class Router:
     '''Build and send a reply Datagram to the given Datagram coming in over the given Port with the given data.'''
     
     if datagram.source_node in (0x00, 0xFF):
-      pass  # invalid as source, don't reply
+      logging.warning(f"DROP: Reply not sent due to invalid source node ({datagram.source_node}) for Datagram: {datagram}")
+      return
     elif rx_port.node and (datagram.source_network == 0x0000 or 0xFF00 <= datagram.source_network <= 0xFFFE or
                            datagram.source_network < rx_port.network_min or datagram.source_network > rx_port.network_max):
       rx_port.broadcast(Datagram(hop_count=0,
