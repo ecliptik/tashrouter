@@ -73,7 +73,7 @@ class TashTalkPort(LocalTalkPort):
   def set_node_id(self, node):
     self._writer_queue.put(self._set_node_address_cmd(node))
     super().set_node_id(node)
-  
+ 
   def _reader_run(self):
     self._reader_started_event.set()
     fcs = FcsCalculator()
@@ -97,10 +97,16 @@ class TashTalkPort(LocalTalkPort):
             fcs.reset()
             buf_ptr = 0
             continue
+
         if buf_ptr < len(buf):
           fcs.feed_byte(byte)
           buf[buf_ptr] = byte
           buf_ptr += 1
+        else:
+          # Buffer overflow - reset and log the error
+          fcs.reset()
+          buf_ptr = 0
+          logging.warning("TashTalkPort buffer overflow, frame discarded")
     self._reader_stopped_event.set()
   
   def _writer_run(self):
